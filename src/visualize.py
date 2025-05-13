@@ -23,7 +23,7 @@ def visualize_eeg(file_path):
     print(f"チャンネル名: {raw.ch_names}")
     
     # データをフィルタリング (0.5-40Hz)
-    raw.filter(0.5, 40)
+    # raw.filter(0.5, 40)
     
     # データをプロット
     raw.plot(scalings='auto', title='EEGデータ可視化', show=True)
