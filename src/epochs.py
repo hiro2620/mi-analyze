@@ -1,28 +1,20 @@
-import sys
 import csv
+import pickle
 import mne
 import numpy as np
+from pathlib import Path
 import matplotlib.pyplot as plt
-import japanize_matplotlib
-import pickle
+
+data_file_path = "data/20250512/processed/ishii0001_ica.pkl"
+seq_file_path = "data/tasks/hand1/task-sequence.csv"
 
 MI_TASK_DURATION_MS = 3000
-ELECTRODE_NAMES = [
-    'C2', 'Cz', 'C1', 'C3', 'CP2', 'CPz', 'CP1', 'CP3',
-    'TP9', 'O1', 'P7', 'C5', 'Fp1', 'F7', 'FC3', 'T7',
-    'CP6', 'C4', 'C6', 'T8', 'F8', 'Fp2', 'FC6', 'AFz',
-    'FC1', 'FCz', 'FC4', 'FC2', 'CP4', 'TP10', 'O2', 'P8',
-]
 
-# .vhdrファイルを指定 (.eegデータの実体は.vhdrファイルから参照される)
-if len(sys.argv) < 3:
-    print("Usage: python main.py <path_to_vhdr_file> <path_to_seq_file>")
-    sys.exit(1)
+# pickleのEEGデータを読み込む
+with open(data_file_path, 'rb') as f:
+    raw = pickle.load(f)
 
-file_path = sys.argv[1]
-seq_file_path = sys.argv[2]
-
-
+# タスク順序を読み込む
 task_sequence = []
 with open(seq_file_path, 'r') as f:
     csv_reader = csv.reader(f)
@@ -37,37 +29,6 @@ with open(seq_file_path, 'r') as f:
                 print(f"Invalid data in row: {row}")
                 continue
 
-# .vhdrファイルを指定してEEGデータを読み込む
-raw = mne.io.read_raw_brainvision(file_path, preload=True)
-rename_mapping = {ch: ELECTRODE_NAMES[i] for i, ch in enumerate(raw.ch_names)}
-raw.rename_channels(rename_mapping)
-raw.set_montage('easycap-M1')
-
-# remove drift
-raw.filter(l_freq=1.0, h_freq=40)
-
-# ICAによるノイズ除去
-print("ICAによるノイズ除去を開始します...")
-ica = mne.preprocessing.ICA(n_components=20, random_state=42)
-ica.fit(raw)
-
-
-ica.plot_sources(raw)
-ica.exclude = [0, 2, 15, 14, 19]
-# ica.exclude = [i for i in range(20)]
-ica.plot_properties(raw, picks=ica.exclude, psd_args={'fmax': 50}, show=False)
-
-# ノイズ除去を適用
-raw_cleaned = raw.copy()
-ica.apply(raw_cleaned)
-
-# 元のデータと比較
-raw.plot(duration=5, n_channels=20, title='Original Data')
-raw_cleaned.plot(duration=5, n_channels=20, title='ICA Cleaned Data')
-
-# 以降の処理では、raw_cleanedを使用
-raw = raw_cleaned
-
 raw_events, _labels = mne.events_from_annotations(raw)
 triggers_mask = raw_events[:, 2] == 254
 event_timestamps = raw_events[triggers_mask, 0]
@@ -80,17 +41,26 @@ for i, t in enumerate(event_timestamps):
 
 events = np.array(events, dtype=int)
 
-mne.viz.plot_events(events, sfreq=raw.info['sfreq'], first_samp=raw.first_samp, show=True, event_id=None)
+# mne.viz.plot_events(events, sfreq=raw.info['sfreq'], first_samp=raw.first_samp, show=True, event_id=None)
 
 # (エポック数, チャンネル数, 時間サンプル数)
 epochs = mne.Epochs(raw, events, tmin=-1, tmax=2, preload=True)
-# epochs = epochs["1"]
-epochs.plot(scalings="auto", events=events)
+
+# インタラクティブにエポックを表示してbadエポックをマーキング
+# (プロット上でクリックして不良エポックを選択できます)
+fig = epochs.plot(scalings="auto", events=events)
 plt.show()
+
+# badとしてマークされたエポックの情報を表示
+n_dropped = len([log for log in epochs.drop_log if len(log) > 0])
+print(f"badとしてマークされたエポック数: {n_dropped}")
+print(f"残りのエポック数: {len(epochs)}")
 
 
 # ファイルの保存先を設定
-output_file_path = file_path.replace('.vhdr', '_epochs.pkl')
+output_file_name= Path(data_file_path).stem + "_epochs.pkl"
+save_dir = Path(data_file_path).parent
+output_file_path = save_dir / output_file_name
 epochs_list = epochs.get_data()
 labels = epochs.events[:,-1]
 
@@ -99,11 +69,14 @@ data_to_save = {
     'epochs_data': epochs_list,
     'labels': labels,
     'sfreq': raw.info['sfreq'],
-    'ch_names': raw.info['ch_names']
+    'ch_names': raw.info['ch_names'],
+    'drop_log': epochs.drop_log,  # 不良とマークされたエポックの記録
+    'selection': epochs.selection,  # 保持されているエポックのインデックス
+    'drop_indices': np.where(np.array([len(log) > 0 for log in epochs.drop_log]))[0]  # 除外されたエポックのインデックス
 }
 
 # pickleを使用してデータを保存
-# with open(output_file_path, 'wb') as f:
-#     pickle.dump(data_to_save, f)
+with open(str(output_file_path), 'wb') as f:
+    pickle.dump(data_to_save, f)
 
 print(f"データを {output_file_path} に保存しました")
