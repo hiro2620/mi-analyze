@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-data_file_path = "data/20250512/processed/ishii0008_ica.pkl"
+data_file_path = "data/20250512/processed/ishii0005_ica.pkl"
 seq_file_path = "data/tasks/hand2/task-sequence.csv"
 
 MI_TASK_DURATION_MS = 3000
@@ -32,7 +32,7 @@ with open(seq_file_path, 'r') as f:
 raw_events, _labels = mne.events_from_annotations(raw)
 triggers_mask = raw_events[:, 2] == 254
 event_timestamps = raw_events[triggers_mask, 0]
-print(f"event_timestamps: {event_timestamps}")
+print(f"event_timestamps: {event_timestamps} {len(event_timestamps)}")
 
 assert len(task_sequence) == len(event_timestamps), "Task sequenceとevent timestampsの長さが一致しません"
 events = []
@@ -45,7 +45,7 @@ events = np.array(events, dtype=int)
 # mne.viz.plot_events(events, sfreq=raw.info['sfreq'], first_samp=raw.first_samp, show=True, event_id=None)
 
 # (エポック数, チャンネル数, 時間サンプル数)
-epochs = mne.Epochs(raw, events, tmin=-1, tmax=2, preload=True)
+epochs = mne.Epochs(raw, events, tmin=-1, tmax=5, preload=True)
 
 # インタラクティブにエポックを表示してbadエポックをマーキング
 # (プロット上でクリックして不良エポックを選択できます)
@@ -62,14 +62,11 @@ print(f"残りのエポック数: {len(epochs)}")
 output_file_name= Path(data_file_path).stem + "_epochs.pkl"
 save_dir = Path(data_file_path).parent
 output_file_path = save_dir / output_file_name
-epochs_list = epochs.get_data()
 labels = epochs.events[:,-1]
-
-print(epochs_list.shape)
 
 # データを保存するための辞書を作成
 data_to_save = {
-    'epochs_data': epochs_list,
+    'epochs': epochs,
     'labels': labels,
     'sfreq': raw.info['sfreq'],
     'ch_names': raw.info['ch_names'],

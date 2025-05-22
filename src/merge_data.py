@@ -19,7 +19,7 @@ for entry in entries:
     file_path = base_path / entry
     with open(file_path, 'rb') as f:
         data = pickle.load(f)
-        all_epochs.append(data['epochs_data'])
+        all_epochs.append(data['epochs'].get_data())
         all_labels.append(data['labels'])
 
 # axis=0の方向に結合する
