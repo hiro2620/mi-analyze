@@ -10,7 +10,7 @@ entries = [
     "ishii0008_ica_epochs.pkl",
 ]
 
-output_path = base_path / "ishii_merged.pkl"
+output_path = base_path / "ishii_task2_merged.pkl"
 
 # すべてのpickleファイルを読み込み、データをマージする
 all_epochs = []

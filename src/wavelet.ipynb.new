@@ -1,0 +1,187 @@
+<!-- filepath: /home/neuron/Documents/mi-analyze/src/wavelet.ipynb -->
+<VSCode.Cell id="0d3f3116" language="python">
+import pickle
+import matplotlib.pyplot as plt
+import japanize_matplotlib
+import pywt
+import numpy as np
+from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+import seaborn as sns
+</VSCode.Cell>
+<VSCode.Cell id="46d57503" language="python">
+data_file_path = "../data/20250512/processed/ishii_merged.pkl"
+</VSCode.Cell>
+<VSCode.Cell id="6143cdd9" language="python">
+# pickleのEEGデータを読み込む
+with open(data_file_path, 'rb') as f:
+    data = pickle.load(f)
+
+epochs_list = data['epochs_data']  # エポックデータ
+labels = data['labels']  # ラベル
+# drop_indices = data['drop_indices']  # 除外されたエポックのインデックス
+fs = 500
+</VSCode.Cell>
+<VSCode.Cell id="eb078045" language="python">
+epochs_list.shape
+</VSCode.Cell>
+<VSCode.Cell id="95b703e5" language="python">
+labels.shape
+</VSCode.Cell>
+<VSCode.Cell id="bac9e0a5" language="python">
+e0 = epochs_list[0, :, :]
+e0c0 = epochs_list[5, 2, :]
+e0c0
+</VSCode.Cell>
+<VSCode.Cell id="bba8521c" language="python">
+# e0c0をwavelet変換する
+scales = np.arange(1, 128)
+# Morlet waveletでCWT実行
+coefficients, frequencies = pywt.cwt(e0c0, scales, 'cmor', 1/fs)
+</VSCode.Cell>
+<VSCode.Cell id="570735a4" language="python">
+# Wavelet変換の結果をプロット
+plt.figure(figsize=(10, 6))
+plt.imshow(np.abs(coefficients), aspect='auto', extent=[0, len(e0c0)/fs, 1, 128], cmap='jet', origin='lower')
+plt.colorbar(label='Magnitude')
+plt.title('CWT of EEG Signal (Channel 0)')
+plt.xlabel('Time (s)')
+plt.ylabel('Scale')
+plt.show()
+</VSCode.Cell>
+<VSCode.Cell id="b2ca4461" language="python">
+def calc_spectrum(data, fs):
+    coefficients, frequencies = pywt.cwt(e0c0, scales, 'cmor', 1/fs)
+    power = np.abs(coefficients) ** 2
+</VSCode.Cell>
+<VSCode.Cell id="eed0fedc" language="python">
+# 全チャンネルのwavelet変換の結果を格納するための配列
+all_channel_power = np.zeros((31, len(scales)))
+
+# 例としてepochs_list[5]を使用（先ほどのe0c0はepochs_list[5, 2, :]だった）
+epoch_idx = 4
+
+# 各チャネルに対してwavelet変換を実行
+for ch in range(epochs_list.shape[1]):
+    signal = epochs_list[epoch_idx, ch, :]
+    coeffs, _ = pywt.cwt(signal, scales, 'cmor', 1/fs)
+    # パワーを計算（複素数の絶対値の二乗）
+    power = np.abs(coeffs)**2
+    # 各スケールの平均パワーを計算
+    all_channel_power[ch, :] = np.mean(power, axis=1)
+
+# 可視化するスケール/周波数バンドを選択
+# デルタ（1-4Hz）、シータ（4-8Hz）、アルファ（8-13Hz）、ベータ（13-30Hz）、ガンマ（30-100Hz）
+freq_bands = {
+    'delta': (1, 4),
+    'theta': (4, 8),
+    'alpha': (8, 13),
+    'beta': (13, 30),
+    'gamma': (30, 80)
+}
+
+# 各周波数帯のインデックスを取得
+band_indices = {}
+for band, (low, high) in freq_bands.items():
+    # 周波数からスケールのインデックスを見つける
+    low_idx = np.where(frequencies <= high)[0][0] if any(frequencies <= high) else 0
+    high_idx = np.where(frequencies >= low)[0][-1] if any(frequencies >= low) else -1
+    band_indices[band] = (low_idx, high_idx)
+
+# トポマップを作成
+fig, axes = plt.subplots(1, 5, figsize=(20, 4))
+fig.suptitle(f'脳波パワースペクトルトポマップ (Epoch {epoch_idx})', fontsize=16)
+
+# チャンネル位置の簡易的なマッピング（実際の電極位置に基づいて調整が必要）
+# 本来はEEGキャップの電極配置に基づいて正確な位置情報が必要
+# これは簡略化した例
+n_channels = epochs_list.shape[1]
+# 円状に電極を配置する簡易的なアプローチ
+theta = np.linspace(0, 2*np.pi, n_channels, endpoint=False)
+x = np.cos(theta)
+y = np.sin(theta)
+pos = np.vstack([x, y]).T
+
+for i, (band, (low_idx, high_idx)) in enumerate(band_indices.items()):
+    # 各バンドのパワーを計算
+    band_power = np.mean(all_channel_power[:, low_idx:high_idx+1], axis=1)
+    
+    # トポマップのプロット
+    im = axes[i].scatter(x, y, c=band_power, cmap='jet', s=100)
+    axes[i].set_title(f'{band.capitalize()} ({freq_bands[band][0]}-{freq_bands[band][1]} Hz)')
+    axes[i].set_xlim(-1.2, 1.2)
+    axes[i].set_ylim(-1.2, 1.2)
+    axes[i].set_aspect('equal')
+    axes[i].axis('off')
+    plt.colorbar(im, ax=axes[i], orientation='horizontal', label='Power')
+
+plt.tight_layout()
+plt.show()
+</VSCode.Cell>
+<VSCode.Cell id="fd066ca5" language="python">
+epoch_idx = 4
+
+# wavelet変換の、チャンネル
+all_channel_power = np.zeros((31, len(scales)))
+for ch in range(epochs_list.shape[1]):
+    signal = epochs_list[epoch_idx, ch, :]
+    coeffs, _ = pywt.cwt(signal, scales, 'cmor', 1/fs)
+    power = np.abs(coeffs)**2
+    all_channel_power[ch, :] = np.mean(power, axis=1)
+
+all_channel_power
+
+
+</VSCode.Cell>
+<VSCode.Cell id="3a3baf9a" language="python">
+# 1チャンネルのデータをWavelet変換してバンドパスパワーを計算
+def calc_spectrum(data, band_count, fs):
+    # サンプリングレートに応じてスケールを設定
+    # 1-40Hzをカバーするスケール範囲を設定
+    widths = np.arange(1, 128)
+    
+    # Morlet waveletでCWT実行
+    coefficients, frequencies = pywt.cwt(data, widths, 'cmor', 1/fs)
+    
+    # パワーを計算（複素数の絶対値の二乗）
+    power = np.abs(coefficients)**2
+    
+    # 1Hz-40Hzまでのband_count個のバンドパスパワーを計算
+    band_lower = 1
+    band_upper = 40
+    band_powers = [None] * band_count
+    
+    for i in range(band_count):
+        # 均等にバンドを分割
+        band_min = band_lower + i * (band_upper - band_lower) / band_count
+        band_max = band_lower + (i + 1) * (band_upper - band_lower) / band_count
+        
+        # 該当する周波数範囲のインデックスを取得
+        band_indices = np.where((frequencies >= band_min) & (frequencies < band_max))[0]
+        
+        if len(band_indices) > 0:
+            # 各バンドの平均パワーを計算
+            band_powers[i] = np.mean(np.mean(power[band_indices, :], axis=1))
+        else:
+            # インデックスが見つからない場合は0を設定
+            band_powers[i] = 0
+    
+    # band_powersの中にNoneがないことをassert
+    assert all([v is not None for v in band_powers]), "Some band powers are None"
+    
+    return band_powers
+
+# 全エポックのすべてのチャンネルに対してバンドパワーを計算
+band_count = 20
+all_epochs_band_powers = np.zeros((epochs_list.shape[0], epochs_list.shape[1], band_count))
+
+for i in range(epochs_list.shape[0]):
+    for j in range(epochs_list.shape[1]):
+        epoch_data = epochs_list[i, j, :]
+        all_epochs_band_powers[i, j, :] = calc_spectrum(epoch_data, band_count, fs)
+
+print(f"Calculated band powers for {epochs_list.shape[0]} epochs, {epochs_list.shape[1]} channels, {band_count} frequency bands")
+</VSCode.Cell>

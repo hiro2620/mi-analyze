@@ -34,13 +34,9 @@ triggers_mask = raw_events[:, 2] == 254
 event_timestamps = raw_events[triggers_mask, 0]
 print(f"event_timestamps: {event_timestamps}")
 
-# assert len(task_sequence) == len(event_timestamps), "Task sequenceとevent timestampsの長さが一致しません"
-print(len(event_timestamps))
-print(len(task_sequence))
+assert len(task_sequence) == len(event_timestamps), "Task sequenceとevent timestampsの長さが一致しません"
 events = []
 for i, t in enumerate(event_timestamps):
-    if i == len(task_sequence) - 1:
-        break
     events.append([t, 0, task_sequence[i]])
     events.append([t+MI_TASK_DURATION_MS*raw.info['sfreq']/1000.0, 0, 9999])
 
@@ -69,6 +65,8 @@ output_file_path = save_dir / output_file_name
 epochs_list = epochs.get_data()
 labels = epochs.events[:,-1]
 
+print(epochs_list.shape)
+
 # データを保存するための辞書を作成
 data_to_save = {
     'epochs_data': epochs_list,
@@ -81,7 +79,7 @@ data_to_save = {
 }
 
 # pickleを使用してデータを保存
-with open(str(output_file_path), 'wb') as f:
+with open(output_file_path, 'wb') as f:
     pickle.dump(data_to_save, f)
 
 print(f"データを {output_file_path} に保存しました")
