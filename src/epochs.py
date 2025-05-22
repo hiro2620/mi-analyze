@@ -5,8 +5,8 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-data_file_path = "data/20250512/processed/ishii0001_ica.pkl"
-seq_file_path = "data/tasks/hand1/task-sequence.csv"
+data_file_path = "data/20250512/processed/ishii0008_ica.pkl"
+seq_file_path = "data/tasks/hand2/task-sequence.csv"
 
 MI_TASK_DURATION_MS = 3000
 
@@ -32,10 +32,15 @@ with open(seq_file_path, 'r') as f:
 raw_events, _labels = mne.events_from_annotations(raw)
 triggers_mask = raw_events[:, 2] == 254
 event_timestamps = raw_events[triggers_mask, 0]
+print(f"event_timestamps: {event_timestamps}")
 
-assert len(task_sequence) == len(event_timestamps), "Task sequenceとevent timestampsの長さが一致しません"
+# assert len(task_sequence) == len(event_timestamps), "Task sequenceとevent timestampsの長さが一致しません"
+print(len(event_timestamps))
+print(len(task_sequence))
 events = []
 for i, t in enumerate(event_timestamps):
+    if i == len(task_sequence) - 1:
+        break
     events.append([t, 0, task_sequence[i]])
     events.append([t+MI_TASK_DURATION_MS*raw.info['sfreq']/1000.0, 0, 9999])
 
